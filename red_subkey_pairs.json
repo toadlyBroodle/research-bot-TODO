@@ -1,0 +1,14 @@
+{"sub_key_pairs": [
+{
+  "subreddits": "bulletjournal",
+  "keywords_and": ["android"],
+  "keywords_or": [],
+  "keywords_not": []
+},
+{
+  "subreddits": "adhd",
+  "keywords_and": ["app", "android"],
+  "keywords_or": ["list", "organize", "todo", "productivity", "outline"],
+  "keywords_not": []
+}
+]}
