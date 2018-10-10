@@ -1,5 +1,7 @@
 # social-research-bot
-A semi-autonomous bot for researching (scraping, filtering, analyzing) social media sites (reddit, twitter; [TODO: instagram, facebook]) using customizable queries (user, hashtag, and keyword combinations).
+
+A semi-autonomous bot for researching (scraping, filtering, analyzing) social media sites (reddit, twitter; [TODO: instagram, facebook]) using customizable queries (keyword, hashtag, user, subreddit, category combinations).
+
 Coded in python3 and bash for command-line (CLI).
 
 ## features
@@ -21,7 +23,9 @@ Coded in python3 and bash for command-line (CLI).
 ## dependencies
 - install dependencies you probably don't have already (errors will show up if you're missing any others)
 	- install pip3 `sudo apt install python3-pip`
-	- install dependencies `pip3 install --user tweepy bs4 praw`
+	- install dependencies `pip3 install --user tweepy praw`
+
+# Reddit
 
 ## reddit initial setup
 - <a href="https://praw.readthedocs.io/en/v4.0.0/getting_started/configuration/prawini.html">update 'praw.ini'</a> with <a href="https://www.reddit.com/prefs/apps/">your reddit app credentials</a>
@@ -61,6 +65,11 @@ user_agent=fakebot 0.1
 ## reddit usage
 [TODO]
 
+## reddit workflows
+[TODO]
+
+# Twitter
+
 ## twitter initial setup
 - create new directory to store new job data
 - create new 'credentials.txt' file in job directory to store your twitter app's credentials
@@ -85,6 +94,7 @@ your_twitter_password
 [TODO]
 
 ## twitter example workflows
+[TODO: adapt this to new workflows]
 1) continuous mode
 	- `-cspf` scrape and promote to all tweets matching queries
 2) overwatch mode

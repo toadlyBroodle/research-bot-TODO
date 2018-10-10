@@ -15,31 +15,27 @@ import re
 import os
 # Twitter imports:
 import tweepy
-# Web Scraping, Parsing imports:
-import getpass
-import requests
-import bs4
 
 # global variables
 abs_dir = os.path.dirname(os.path.abspath(__file__)) #<-- absolute path to project directory
-# paths to files
-path_scrp_dmp = None
-path_queries = None
-path_log = None
+# paths to data files
+paths_data = [None, None, None, None, None, None]
 # twitter
-q_lines = []
-q_length = 0
+q_lines = [] # queries from twit_queries.txt
+q_length = 0 # numbe of queries
 api = None
 # reddit
 reddit = None
 reddit_subkeys = None
 
 
+## General functions
+
 # record certain events in log.txt
 def log(s):
     t = strftime("%Y%b%d %H:%M:%S", localtime()) + " " + s
 
-    with open(path_log, 'a') as l:
+    with open(paths_data[5], 'a') as l:
         l.write(t + "\n")
 
     # also print truncated log to screen
@@ -50,6 +46,8 @@ def wait(min, max):
     wt = randint(min, max)
     print("sleeping " + str(wt) + "s...")
     sleep(wt)
+
+## Reddit stuff TODO
 
 def authReddit():
     global reddit
@@ -168,6 +166,9 @@ def scrapeReddit(scrape_limit, r_new, r_top, r_hot, r_ris):
             i += 1
         scrape_log(i, k)
 
+
+## Twitter stuff
+
 def handleTweepyError(e, scrn_name):
     if "Could not authenticate you" in e.reason:
         log("Authentication failed: check credentials for validity - " + e.reason)
@@ -200,27 +201,25 @@ def handleTweepyError(e, scrn_name):
     if ('89' in e.reason):
         log(e.reason)
 
+def getTwitterDataFilePaths(job_dir):
+    global paths_data
+
+    paths_data[0] = os.path.join(abs_dir, job_dir + 'twit_queries.txt')
+    paths_data[1] = os.path.join(abs_dir, job_dir + 'twit_scrape_dump.txt')
+    paths_data[2] = os.path.join(abs_dir, job_dir + 'twit_result_counts.txt')
+    paths_data[3] = os.path.join(abs_dir, job_dir + 'twit_result_related.txt')
+    paths_data[4] = os.path.join(abs_dir, job_dir + 'twit_result_influencers.txt')
+    paths_data[5] = os.path.join(abs_dir, job_dir + 'twit_log.txt')
+
 # get authentication credentials and tweepy api object
 def authTwitter(job_dir):
 
-    global path_scrp_dmp
-    global path_queries
-    global path_log
+    global api
     global q_lines
     global q_length
-    global api
 
-    # get correct paths to files for current job
-    if job_dir:
-        cred_path = os.path.join(abs_dir, job_dir + 'credentials.txt')
-        path_scrp_dmp = os.path.join(abs_dir, job_dir + 'twit_scrape_dump.txt')
-        path_queries = os.path.join(abs_dir, job_dir + 'twit_queries.txt')
-        path_log = os.path.join(abs_dir, job_dir + 'log.txt')
-    else:
-        cred_path = os.path.join(abs_dir, 'credentials.txt')
-        path_scrp_dmp = os.path.join(abs_dir, 'twit_scrape_dump.txt')
-        path_queries = os.path.join(abs_dir, 'twit_queries.txt')
-        path_log = os.path.join(abs_dir, 'log.txt')
+    # get credentials file path
+    cred_path = os.path.join(abs_dir, job_dir + 'credentials.txt')
 
     # get authorization credentials from credentials file
     with open(cred_path, 'r') as creds:
@@ -247,11 +246,30 @@ def authTwitter(job_dir):
             sys.exit(1)
 
     # load queries from text file
-    with open(path_queries, 'r') as queryFile:
+    with open(paths_data[0], 'r') as queryFile:
         q_lines = queryFile.readlines()
 
     # get number of queries
     q_length = sum(1 for _ in q_lines)
+
+# erase a job's existing data and replace with empty files
+def newTwitterJob(job_dir):
+    if not os.path.isdir(job_dir):
+        create_new_dir = input(job_dir + " does not exist, create new directory? y/n: ").lower()
+        if create_new_dir == 'y':
+            os.mkdir(job_dir)
+        else:
+            sys.exit(1)
+    else:
+        overwrite_data = input("Overwrite " + job_dir + " data? y/n: ").lower()
+        if not overwrite_data == 'y':
+            sys.exit(1)
+
+    getTwitterDataFilePaths(job_dir)
+    # create new blank files, overwrite any existing
+    for p in paths_data:
+        open(p, 'w')
+
 
 def buildDumpLine(tweet):
     return (tweet.created_at.strftime("%b%d %H:%M")
@@ -270,28 +288,46 @@ def parseDumpLine(dl):
     except IndexError:
         raise IndexError
 
-def processTweet(tweet, pro, fol, dm):
+def dumpTweet(tweet):
 
-    scrn_name = tweet.user.screen_name
+    if t_dum:
+        scrn_name = tweet.user.screen_name
 
-    # open dump file in read mode
-    with open(path_scrp_dmp, 'r') as f:
-        scrp_lines = f.readlines()
+        # open dump file in read mode
+        with open(paths_data[1], 'r') as f:
+            scrp_lines = f.readlines()
 
-        # if tweet already scraped, then return
-        if any(str(tweet.id) in s for s in scrp_lines):
-            return 0
+            # if tweet already scraped, then return
+            if any(str(tweet.id) in s for s in scrp_lines):
+                return 0
 
-    # otherwise append to twit_scrape_dump.txt
-    new_line = buildDumpLine(tweet)
-    with open(path_scrp_dmp, 'a') as f:
-        f.write(new_line)
+        # otherwise append to twit_scrape_dump.txt
+        new_line = buildDumpLine(tweet)
+        with open(paths_data[1], 'a') as f:
+            f.write(new_line)
 
     return 1 # return count of new tweets added to twit_scrape_dump.txt
 
+def processTweet(tweet, t_cnt, t_rel, t_inf):
+    # get tweet date
+    twt_date = tweet.created_at.strftime("%Y%b%d")
+    
+    # update result counts, twit_result_counts.txt
+    #if t_cnt:
+        # load count file
+        # update query result count for date
+        # save count file
+    
+    # update result related tags, twit_result_related.txt
+    #if t_rel:
+        #TODO
+    # update result incluencers, twit_result_influencers.txt
+    #if t_inf:
+        #TODO
+
 
 # continuously scrape for tweets matching all queries
-def scrapeTwitter(con, eng):
+def scrapeTwitter(t_str, t_dum, t_cnt, t_rel, t_inf):
 
     def report_scrapes(i, k):
             log(("Scraped: {total} tweets ({new} new) found with: {query}\n".format(
@@ -299,40 +335,41 @@ def scrapeTwitter(con, eng):
             new=str(k),
             query=query.replace("\n", ""))))
 
-    print("Scraping...")
-
-    for query in q_lines:
-        c = None
-        if eng:
-            c = tweepy.Cursor(api.search, q=query, lang='en').items()
-        else:
+    # scrape streaming data TODO
+    if t_str:
+        sys.exit(1)
+    # scrape historical database
+    else:
+        for query in q_lines:
             c = tweepy.Cursor(api.search, q=query).items()
-        i = 0 # total tweets scraped
-        k = 0 # new tweets scraped
-        while True:
-            try:
-                # prompt user to continue scraping after 50 results
-                if (not con and i%51 == 50):
-                    query_trunc = query[:20] + (query[20:] and '..')
-                    keep_going = input("{num} results scraped for {srch}, keep going? (Y/n):".format(num=str(i), srch=query_trunc))
-                    if (keep_going != "Y"):
-                        raise StopIteration()
-                # process next tweet
-                k += processTweet(c.next(), pro, fol, dm)
-                i += 1
-            except tweepy.TweepError as e:
-                ret_code = handleTweepyError(e, None)
-                if ret_code is 2: # HTTPError returned from query, move onto next query
-                    break
+            i = 0 # total tweets scraped
+            k = 0 # new tweets scraped
+            
+            query_trunc = query[:20] + (query[20:] and '..')
+            print("Scraping for {srch}...".format(srch=query_trunc))
 
-                report_scrapes(i, k)
-                log("Reached API window limit: taking 15min smoke break..." + e.reason)
-                # wait for next request window to continue
-                wait(60 * 15, 60 * 15 + 1)
-                continue
-            except StopIteration:
-                report_scrapes(i, k)
-                break
+            while True:
+                try:
+                    # process next tweet
+                    nextTweet = c.next()
+                    processTweet(nextTweet, t_cnt, t_rel, t_inf)
+
+                    if t_dum:
+                        dumpTweet(nextTweet)
+
+                except tweepy.TweepError as e:
+                    ret_code = handleTweepyError(e, None)
+                    if ret_code is 2: # HTTPError returned from query, move onto next query
+                        break
+
+                    report_scrapes(i, k)
+                    log("Reached API window limit...")
+                    # wait for next request window to continue
+                buildDumpLine    wait(60 * 15, 60 * 15 + 1)
+                    continue
+                except StopIteration:
+                    report_scrapes(i, k)
+                    break
 
 
 # get command line arguments and execute appropriate functions
@@ -352,41 +389,58 @@ def main(argv):
     # set SIGNINT listener to catch kill signals
     signal.signal(signal.SIGINT, signal_handler)
 
-    parser = argparse.ArgumentParser(description="Beep, boop.. I'm a social media research bot - Let's get to it!")
+    parser = argparse.ArgumentParser(description="Beep, boop.. I'm a social media analysis bot - Let's get researchy!")
 
     subparsers = parser.add_subparsers(help='platforms', dest='platform')
 
     # Twitter arguments
-    twit_parser = subparsers.add_parser('twitter', help='Twitter: scrape for queries')
-    twit_parser.add_argument('-j', '--job', dest='JOB_DIR', help="choose job to run by specifying job's relative directory")
+    twit_parser = subparsers.add_parser('twitter', help='Twitter: scrape, filter, analyze tweets')
+    twit_parser.add_argument('-j', '--job', dest='JOB_DIR', help="choose job to run by specifying job's relative directory: e.g. bitcoin/")
 
-    group_scrape = twit_parser.add_argument_group('query')
-    group_scrape.add_argument('-s', '--scrape', action='store_true', dest='t_scr', help='scrape for tweets matching queries in twit_queries.txt')
-    group_scrape.add_argument('-c', '--continuous', action='store_true', dest='t_con', help='scape continuously - suppress prompt to continue after 50 results per query')
-    group_scrape.add_argument('-e', '--english', action='store_true', dest='t_eng', help='return only tweets written in English')
+    twit_group_scrape = twit_parser.add_argument_group('scrape')
+    twit_group_scrape.add_argument('-n', '--new', action='store_true', dest='t_new', help='create new job, e.g. erase any existing job data')
+    twit_group_scrape.add_argument('-s', '--stream', action='store_true', dest='t_str', help='continuously stream real-time query results') #TODO
+    twit_group_scrape.add_argument('-d', '--dump', action='store_true', dest='t_dum', help='dump raw results to twit_scrape_dump.txt')
+    twit_group_scrape.add_argument('-c', '--count', action='store_true', dest='t_cnt', help='compile result counts, i.e. number of results, in twit_result_counts.txt')
+    twit_group_scrape.add_argument('-r', '--related', action='store_true', dest='t_rel', help='compile result top related tags, i.e. most associated keywords/hashtags, in twit_result_related.txt')
+    twit_group_scrape.add_argument('-i', '--influencers', action='store_true', dest='t_inf', help='compile result top influencers, i.e. most retweeted, in twit_result_influencers.txt')
 
     # Reddit arguments
-    reddit_parser = subparsers.add_parser('reddit', help='Reddit: scrape subreddits')
-    reddit_parser.add_argument('-s', '--scrape', dest='N', help='scrape subreddits in subreddits.txt for keywords in red_keywords.txt; N = number of posts to scrape')
-    categories = reddit_parser.add_mutually_exclusive_group()
+    red_parser = subparsers.add_parser('reddit', help='Reddit: scrape, filter, analyze subreddits')
+    red_parser.add_argument('-j', '--job', dest='JOB_DIR', help="choose job to run by specifying job's relative directory: e.g. bitcoin/")
+    
+    categories = red_parser.add_mutually_exclusive_group()
     categories.add_argument('-n', '--new', action='store_true', dest='r_new', help='scrape new posts')
     categories.add_argument('-t', '--top', action='store_true', dest='r_top', help='scrape top posts')
     categories.add_argument('-H', '--hot', action='store_true', dest='r_hot', help='scrape hot posts')
     categories.add_argument('-r', '--rising', action='store_true', dest='r_ris', help='scrape rising posts')
+    
+    red_group_scrape = red_parser.add_argument_group('scrape')
+    red_group_scrape.add_argument('-s', '--scrape', dest='N', help='scrape subreddits in subreddits.txt for keywords in red_keywords.txt; N = number of posts to scrape')
+    red_group_scrape.add_argument('-d', '--dump', action='store_true', dest='r_dum', help='dump bulk results to red_scrape_dump.txt')
+
 
     executed = 0 # catches any command/args that fall through below tree
     args = parser.parse_args()
 
     # twitter handler
     if args.platform == 'twitter':
+        # get twitter file paths
+        getTwitterDataFilePaths(args.JOB_DIR)
+
+        # erase existing job data
+        if args.t_new:
+            newTwitterJob(args.JOB_DIR)
+            sys.exit(1)
+
         # get authentication credentials and api
         authTwitter(args.JOB_DIR)
 
-        # scrape twitter for all queries
-        if args.t_scr:
-            scrapeTwitter(args.t_con, args.t_eng)
-            executed = 1
+        # scrape twitter for all queries in `twit_queries.txt`   
+        scrapeTwitter(args.t_str, args.t_dum, args.t_cnt, args.t_rel, args.t_inf)
+        executed = 1
 
+        '''
         else: # otherwise analyze entries in scrape_dump file
             # get scrape dump lines
             f = open(path_scrp_dmp, "r")
@@ -413,6 +467,7 @@ def main(argv):
             report_job_status()
 
             executed = 1
+        '''
 
     # reddit handler
     if args.platform == 'reddit':
@@ -423,7 +478,6 @@ def main(argv):
             executed = 1
 
     if not executed:
-        log("Unknown Execution Error")
         parser.print_help()
         sys.exit(1)
 
